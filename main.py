@@ -4,13 +4,13 @@ Thuật toán: RandomForest (82.7% accuracy)
 Lưu lịch sử dự đoán vào SQLite (max 500 phiên)
 Tự động phát hiện phiên mới và cập nhật
 """
+import asyncio
 import json
 import ssl
 import sqlite3
 import threading
 import time
 import uuid
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -458,33 +458,21 @@ async def auto_refresh_worker():
             await check_for_new_phien()
         except Exception as e:
             print(f"[!] Auto refresh error: {e}")
-        await asyncio_sleep(5)
-
-import asyncio
-
-def start_auto_refresh():
-    asyncio.create_task(auto_refresh_worker())
-
-def asyncio_sleep(seconds):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(asyncio.sleep(seconds))
-    finally:
-        loop.close()
+        await asyncio.sleep(5)
 
 # ===================== API ROUTES =====================
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     init_db()
     await initialize_model()
     model_state['auto_refresh_active'] = True
-    start_auto_refresh()
+    task = asyncio.create_task(auto_refresh_worker())
     print("[+] Auto-refresh started (every 5s)")
-
-@app.on_event("shutdown")
-def shutdown():
+    yield
     model_state['auto_refresh_active'] = False
+    task.cancel()
+
+app = FastAPI(title="TaiXiu Predictor API", version="1.0.0", lifespan=lifespan)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
