@@ -70,6 +70,7 @@ def init_db():
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_phien ON predictions(phien)
         """)
+        db.execute("DELETE FROM predictions")
 
 @contextmanager
 def get_db():
